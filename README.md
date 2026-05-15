@@ -165,8 +165,31 @@ wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 - [x] プロジェクトセットアップ + サプライチェーン対策
 - [x] Supabase クライアント(SSR 対応)
 - [x] 認証(サインアップ / ログイン / リカバリー / ログアウト)
-- [x] DB スキーマ + RLS(初期 7 テーブル)
-- [x] 仮ダッシュボード
+- [x] DB スキーマ + RLS(初期 7 テーブル + coin_transactions = 8 テーブル)
+- [x] 入力ロジック(チェック/週次/月次)とコインシステム(RPC 経由・改ざん耐性)
+- [x] 街並み UI(時代別建物、季節エフェクト、住人 NPC、マイルストーン演出)
+- [x] メンターコメント機能
 - [x] Cloudflare Workers 設定ファイル
 
-次フェーズで街並み UI、チェックボックスとコインロジック、マイルストーン演出を実装します。
+---
+
+## デバッグツール(フェーズ3完了時に削除する)
+
+`/day-override` は開発時に Day 数やマイルストーン演出を強制発火するためのツールです。
+**`NODE_ENV=development` かつ `NEXT_PUBLIC_DEBUG_MODE=true` の両方を満たす時のみ動作**し、
+本番ビルドでは `notFound()` を返します。DB は一切書き換えません。
+
+### 削除手順(本番リリース前に実施)
+
+1. フォルダ削除: `src/app/(debug)/`
+2. デバッグストア削除: `src/lib/stores/debugStore.ts`
+3. デバッグガード削除: `src/lib/debug/enabled.ts`
+4. `src/app/(app)/dashboard/DashboardClient.tsx` から以下を取り除く:
+   - `useDebugStore` / `useEffectiveDay` / `DEBUG_ENABLED` の import 行
+   - `consumeForced` を使った useEffect 全体
+   - 末尾の `{DEBUG_ENABLED && (...)} ` ブロック
+   - `day = useEffectiveDay(props.serverDay)` → `day = props.serverDay`
+5. `src/components/city/CityScene.tsx` の `useEffectiveSeason` 呼び出しを外し、
+   `effective = season` に置き換え
+6. `.env.local` から `NEXT_PUBLIC_DEBUG_MODE` 行を削除
+7. `pnpm build` を実行してエラーが出ないか確認

@@ -2,19 +2,27 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/auth/LogoutButton";
-import { DailyChecks } from "@/components/checkboxes/DailyChecks";
 import { ReminderBanner } from "@/components/banners/ReminderBanner";
 import { MonthlyOverdueModal } from "@/components/banners/MonthlyOverdueModal";
+import { DashboardClient } from "./DashboardClient";
+import { DayBadge } from "./DayBadge";
 import {
   getJstContext,
   isEarlyMonth,
   isLateMonth,
   isoDayOfWeek,
+  parseYmd,
+  formatYmd,
   previousYearMonth,
   previousWeekStartOf,
 } from "@/lib/date/week";
 import { summarizeStreak } from "@/lib/stats/streak";
+import { computeDay, eraIfShouldUpdate } from "@/lib/city/milestones";
+import { setCurrentEraAction } from "@/app/actions/city";
 import type { Checkbox } from "@/types/db";
+import type { Season } from "@/lib/city/seasons";
+import type { Era } from "@/lib/city/eras";
+import type { MentorTrigger } from "@/lib/mentor/messages";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -23,8 +31,12 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // プロフィール + 設定
-  const [{ data: profile }, { data: settings }, { data: balance }] = await Promise.all([
+  const [
+    { data: profile },
+    { data: settings },
+    { data: balance },
+    { data: milestone },
+  ] = await Promise.all([
     supabase
       .from("profiles")
       .select("username, started_at")
@@ -32,7 +44,9 @@ export default async function DashboardPage() {
       .single(),
     supabase
       .from("user_settings")
-      .select("final_goal, selected_checkboxes, available_checkboxes")
+      .select(
+        "final_goal, selected_checkboxes, available_checkboxes, current_season",
+      )
       .eq("user_id", user.id)
       .single(),
     supabase
@@ -40,14 +54,32 @@ export default async function DashboardPage() {
       .select("current_coins")
       .eq("user_id", user.id)
       .single(),
+    supabase
+      .from("milestone_progress")
+      .select("current_era")
+      .eq("user_id", user.id)
+      .single(),
   ]);
 
-  // 最終目標が未設定なら onboarding へ
   if (!settings?.final_goal || !settings.final_goal.trim()) {
     redirect("/onboarding");
   }
 
   const ctx = getJstContext();
+  const day = profile?.started_at
+    ? computeDay({ startedAtIso: profile.started_at, todayJst: ctx.today })
+    : 1;
+
+  // サーバー側で era 更新が必要なら RPC 経由で巻き上げ
+  if (milestone?.current_era) {
+    const next = eraIfShouldUpdate({
+      day,
+      currentEra: milestone.current_era as Era,
+    });
+    if (next) {
+      await setCurrentEraAction(next);
+    }
+  }
 
   const [
     { data: todayChecks },
@@ -106,37 +138,56 @@ export default async function DashboardPage() {
     (todayChecks?.checks as Record<string, boolean>) ?? {};
   const initialDayCoins = todayChecks?.coins_earned ?? 0;
 
+  const activeDates = (activeDays ?? []).map((r) => r.check_date as string);
   const { total: totalDays, current: currentStreak } = summarizeStreak({
-    activeDates: (activeDays ?? []).map((r) => r.check_date),
+    activeDates,
     today: ctx.today,
   });
 
   // 催促ロジック
   const overduePrevMonth =
-    !monthPrev && isEarlyMonth(ctx.dayOfMonth) ? previousYearMonth(ctx.yearMonth) : null;
+    !monthPrev && isEarlyMonth(ctx.dayOfMonth)
+      ? previousYearMonth(ctx.yearMonth)
+      : null;
   const showMonthLateBanner = isLateMonth(ctx.dayOfMonth) && !monthThis;
   const weeklyGoalMissing = !weeklyGoal?.goal_text;
   const iso = isoDayOfWeek(ctx.weekdayJst);
-  const showWeeklyGoalBanner = iso <= 2 && weeklyGoalMissing; // Mon/Tue
+  const showWeeklyGoalBanner = iso <= 2 && weeklyGoalMissing;
   const showWeeklyProgressBanner =
-    iso >= 6 && // Sat/Sun
-    lastWeeklyGoal?.goal_text &&
-    lastWeeklyGoal.progress_text === null;
+    iso >= 6 && lastWeeklyGoal?.goal_text && lastWeeklyGoal.progress_text === null;
+
+  // 初回マウント時の trigger 判定:
+  //   first_login: これまで 1 回もチェックしていない
+  //   long_absence: 直近の活動が 7 日以上前
+  //   それ以外: daily_return
+  let initialTrigger: MentorTrigger = "daily_return";
+  if (activeDates.length === 0) {
+    initialTrigger = "first_login";
+  } else {
+    const last = parseYmd(activeDates[0]);
+    const today = parseYmd(ctx.today);
+    const daysSince = Math.floor((today.getTime() - last.getTime()) / 86400000);
+    if (daysSince >= 7) initialTrigger = "long_absence";
+    // 過去 7 日以内に月次成果が未入力で月末バナーが出ているなら monthly_overdue を優先するかは要件次第。
+    // 今は控えめに daily_return を維持。
+  }
+  // 先月の未入力モーダルが出ている時は monthly_overdue を優先
+  if (overduePrevMonth) initialTrigger = "monthly_overdue";
 
   return (
-    <main className="min-h-screen px-4 py-8 max-w-2xl mx-auto space-y-6">
+    <main className="min-h-screen px-4 py-6 max-w-2xl mx-auto space-y-5">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">city-up</h1>
-          <p className="text-xs text-gray-500">こんにちは、{profile?.username} さん</p>
+          <h1 className="text-xl font-bold">city-up</h1>
+          <p className="text-xs text-gray-500">
+            {profile?.username} さん · <DayBadge serverDay={day} />
+          </p>
         </div>
         <LogoutButton />
       </header>
 
-      {/* 強制モーダル: 先月の月次未入力 */}
       {overduePrevMonth && <MonthlyOverdueModal overdueYearMonth={overduePrevMonth} />}
 
-      {/* バナー */}
       <div className="space-y-2">
         {showMonthLateBanner && (
           <ReminderBanner
@@ -162,27 +213,35 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      {/* コイン残高 */}
-      <section className="rounded-lg border border-gray-200 dark:border-gray-800 p-6 text-center">
-        <p className="text-xs text-gray-500 uppercase tracking-widest">Coins</p>
-        <p className="text-5xl font-bold mt-1">{balance?.current_coins ?? 0}</p>
+      {/* コイン残高 + 累計/連続 */}
+      <section className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 flex items-end justify-between">
+        <div>
+          <p className="text-xs text-gray-500 uppercase tracking-widest">Coins</p>
+          <p className="text-4xl font-bold mt-0.5">{balance?.current_coins ?? 0}</p>
+        </div>
+        <div className="text-right space-y-0.5">
+          <p className="text-xs text-gray-500">
+            累計 <strong className="text-base">{totalDays}</strong> 日
+          </p>
+          <p className="text-xs text-gray-500">
+            連続 <strong>{currentStreak}</strong> 日
+          </p>
+        </div>
       </section>
 
-      {/* 今日のチェック */}
-      {selectedItems.length === 3 ? (
-        <DailyChecks
-          items={selectedItems}
-          initialChecks={initialChecks}
-          initialDayCoins={initialDayCoins}
-        />
-      ) : (
-        <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm">
-          チェック候補の設定が必要です。
-          <Link href="/settings/checkboxes" className="ml-2 underline font-medium">
-            設定する
-          </Link>
-        </div>
-      )}
+      {/* 街並み + メンター + 今日のチェック(クライアント) */}
+      <DashboardClient
+        userId={user.id}
+        serverDay={day}
+        serverSeason={(settings.current_season as Season) ?? "spring"}
+        totalActiveDays={totalDays}
+        lastActiveDate={activeDates[0] ?? null}
+        todayJst={ctx.today}
+        initialTrigger={initialTrigger}
+        selectedItems={selectedItems}
+        initialChecks={initialChecks}
+        initialDayCoins={initialDayCoins}
+      />
 
       {/* 今週の目標 */}
       <section className="rounded-lg border border-gray-200 dark:border-gray-800 p-4">
@@ -224,19 +283,6 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* 累計 / 連続日数 */}
-      <section className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 flex items-baseline justify-between">
-        <div>
-          <p className="text-xs text-gray-500">累計</p>
-          <p className="text-3xl font-bold">{totalDays}<span className="text-sm font-normal text-gray-500"> 日</span></p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">連続</p>
-          <p className="text-lg font-semibold">{currentStreak}<span className="text-xs font-normal text-gray-500"> 日</span></p>
-        </div>
-      </section>
-
-      {/* 設定リンク(小さく) */}
       <div className="text-center pt-2">
         <Link
           href="/settings/checkboxes"
@@ -248,3 +294,6 @@ export default async function DashboardPage() {
     </main>
   );
 }
+
+// 念のため未使用警告抑止
+void formatYmd;
