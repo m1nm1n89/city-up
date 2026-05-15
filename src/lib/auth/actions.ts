@@ -10,6 +10,10 @@ import {
 } from "./recovery";
 import { validatePassword, validateUsername } from "./validators";
 import { usernameToDummyEmail } from "./constants";
+import {
+  DEFAULT_CHECKBOXES,
+  DEFAULT_SELECTED_IDS,
+} from "@/lib/checkboxes/defaults";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -72,7 +76,11 @@ export async function signUpAction(
     },
     {
       table: "user_settings",
-      result: await admin.from("user_settings").insert({ user_id: userId }),
+      result: await admin.from("user_settings").insert({
+        user_id: userId,
+        available_checkboxes: DEFAULT_CHECKBOXES,
+        selected_checkboxes: DEFAULT_SELECTED_IDS,
+      }),
     },
     {
       table: "coin_balance",
