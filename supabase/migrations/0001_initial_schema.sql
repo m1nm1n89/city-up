@@ -28,6 +28,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.profiles FROM PUBLIC;
 REVOKE ALL ON public.profiles FROM anon;
 GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
+GRANT ALL ON public.profiles TO service_role;
 
 CREATE POLICY "profiles_self_select" ON public.profiles
   FOR SELECT TO authenticated
@@ -58,6 +59,7 @@ ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.user_settings FROM PUBLIC;
 REVOKE ALL ON public.user_settings FROM anon;
 GRANT SELECT, INSERT, UPDATE ON public.user_settings TO authenticated;
+GRANT ALL ON public.user_settings TO service_role;
 
 CREATE POLICY "user_settings_self_select" ON public.user_settings
   FOR SELECT TO authenticated
@@ -93,6 +95,7 @@ ALTER TABLE public.daily_checks ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.daily_checks FROM PUBLIC;
 REVOKE ALL ON public.daily_checks FROM anon;
 GRANT SELECT, INSERT, UPDATE ON public.daily_checks TO authenticated;
+GRANT ALL ON public.daily_checks TO service_role;
 
 CREATE POLICY "daily_checks_self_select" ON public.daily_checks
   FOR SELECT TO authenticated
@@ -130,6 +133,7 @@ ALTER TABLE public.weekly_goals ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.weekly_goals FROM PUBLIC;
 REVOKE ALL ON public.weekly_goals FROM anon;
 GRANT SELECT, INSERT, UPDATE ON public.weekly_goals TO authenticated;
+GRANT ALL ON public.weekly_goals TO service_role;
 
 CREATE POLICY "weekly_goals_self_select" ON public.weekly_goals
   FOR SELECT TO authenticated
@@ -168,6 +172,7 @@ ALTER TABLE public.monthly_stats ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.monthly_stats FROM PUBLIC;
 REVOKE ALL ON public.monthly_stats FROM anon;
 GRANT SELECT, INSERT, UPDATE ON public.monthly_stats TO authenticated;
+GRANT ALL ON public.monthly_stats TO service_role;
 
 CREATE POLICY "monthly_stats_self_select" ON public.monthly_stats
   FOR SELECT TO authenticated
@@ -199,6 +204,7 @@ ALTER TABLE public.coin_balance ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.coin_balance FROM PUBLIC;
 REVOKE ALL ON public.coin_balance FROM anon;
 GRANT SELECT, INSERT, UPDATE ON public.coin_balance TO authenticated;
+GRANT ALL ON public.coin_balance TO service_role;
 
 CREATE POLICY "coin_balance_self_select" ON public.coin_balance
   FOR SELECT TO authenticated
@@ -230,6 +236,7 @@ ALTER TABLE public.milestone_progress ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.milestone_progress FROM PUBLIC;
 REVOKE ALL ON public.milestone_progress FROM anon;
 GRANT SELECT, INSERT, UPDATE ON public.milestone_progress TO authenticated;
+GRANT ALL ON public.milestone_progress TO service_role;
 
 CREATE POLICY "milestone_progress_self_select" ON public.milestone_progress
   FOR SELECT TO authenticated
@@ -262,4 +269,4 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.is_username_available(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_username_available(text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.is_username_available(text) TO anon, authenticated, service_role;

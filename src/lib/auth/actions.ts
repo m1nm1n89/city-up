@@ -56,27 +56,47 @@ export async function signUpAction(
     email_confirm: true,
   });
   if (createErr || !created.user) {
+    console.error("[signUp] createUser failed:", createErr);
     return { ok: false, error: "ユーザー作成に失敗しました" };
   }
   const userId = created.user.id;
 
-  const inserts = await Promise.all([
-    admin
-      .from("profiles")
-      .insert({
+  const tableInserts = [
+    {
+      table: "profiles",
+      result: await admin.from("profiles").insert({
         id: userId,
         username: normalizedUsername,
         recovery_code_hash: recoveryHash,
       }),
-    admin.from("user_settings").insert({ user_id: userId }),
-    admin.from("coin_balance").insert({ user_id: userId }),
-    admin.from("milestone_progress").insert({ user_id: userId }),
-  ]);
+    },
+    {
+      table: "user_settings",
+      result: await admin.from("user_settings").insert({ user_id: userId }),
+    },
+    {
+      table: "coin_balance",
+      result: await admin.from("coin_balance").insert({ user_id: userId }),
+    },
+    {
+      table: "milestone_progress",
+      result: await admin
+        .from("milestone_progress")
+        .insert({ user_id: userId }),
+    },
+  ];
 
-  const failure = inserts.find((r) => r.error);
+  const failure = tableInserts.find((r) => r.result.error);
   if (failure) {
+    console.error(
+      `[signUp] insert into ${failure.table} failed:`,
+      failure.result.error,
+    );
     await admin.auth.admin.deleteUser(userId).catch(() => {});
-    return { ok: false, error: "プロファイル作成に失敗しました" };
+    return {
+      ok: false,
+      error: `プロファイル作成に失敗しました (${failure.table}: ${failure.result.error?.message ?? "unknown"})`,
+    };
   }
 
   const { error: signInErr } = await supabase.auth.signInWithPassword({
