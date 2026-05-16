@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CityScene } from "@/components/city/CityScene";
+import { CityScene, SeasonSwitcher } from "@/components/city/CityScene";
 import { MilestoneOverlay } from "@/components/city/MilestoneOverlay";
 import { MentorPanel } from "@/components/mentor/MentorPanel";
 import { DailyChecks } from "@/components/checkboxes/DailyChecks";
+import { setSeasonAction } from "@/app/actions/city";
 import { useMentorStore } from "@/lib/stores/mentorStore";
 import {
   useDebugStore,
@@ -41,6 +42,7 @@ type Props = {
 export function DashboardClient(props: Props) {
   const day = useEffectiveDay(props.serverDay);
   const totalActiveDays = useEffectiveTotalActiveDays(props.totalActiveDays);
+  const [season, setSeason] = useState<Season>(props.serverSeason);
   const [newlyBuiltIndex, setNewlyBuiltIndex] = useState<number | null>(null);
   const [newlyArrivedVillager, setNewlyArrivedVillager] = useState<number | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDay | null>(null);
@@ -96,14 +98,23 @@ export function DashboardClient(props: Props) {
     <>
       <MilestoneOverlay activeDay={activeMilestone} />
 
-      <CityScene
-        userId={props.userId}
-        era={eraAt(day)}
-        totalActiveDays={totalActiveDays}
-        initialSeason={props.serverSeason}
-        newlyBuiltIndex={newlyBuiltIndex}
-        newlyArrivedVillager={newlyArrivedVillager}
-      />
+      <div className="space-y-3">
+        <CityScene
+          userId={props.userId}
+          era={eraAt(day)}
+          totalActiveDays={totalActiveDays}
+          season={season}
+          newlyBuiltIndex={newlyBuiltIndex}
+          newlyArrivedVillager={newlyArrivedVillager}
+        />
+        <SeasonSwitcher
+          current={season}
+          onChange={(s) => {
+            setSeason(s);
+            setSeasonAction(s);
+          }}
+        />
+      </div>
 
       <div className="mt-4">
         <MentorPanel />

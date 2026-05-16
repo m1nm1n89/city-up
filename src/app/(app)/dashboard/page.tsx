@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { GlobalNav } from "@/components/nav/GlobalNav";
 import { ReminderBanner } from "@/components/banners/ReminderBanner";
 import { MonthlyOverdueModal } from "@/components/banners/MonthlyOverdueModal";
 import { DashboardClient } from "./DashboardClient";
@@ -176,14 +177,17 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-2xl mx-auto space-y-5">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">city-up</h1>
-          <p className="text-xs text-gray-500">
-            {profile?.username} さん · <DayBadge serverDay={day} />
-          </p>
+      <header className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold">city-up</h1>
+            <p className="text-xs text-gray-500">
+              {profile?.username} さん · <DayBadge serverDay={day} />
+            </p>
+          </div>
+          <LogoutButton />
         </div>
-        <LogoutButton />
+        <GlobalNav />
       </header>
 
       {overduePrevMonth && <MonthlyOverdueModal overdueYearMonth={overduePrevMonth} />}

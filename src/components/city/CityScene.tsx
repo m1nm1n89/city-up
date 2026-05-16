@@ -14,36 +14,35 @@ import {
 import type { Era } from "@/lib/city/eras";
 import type { Season } from "@/lib/city/seasons";
 import { SEASON_THEME, SEASON_LABELS, SEASONS } from "@/lib/city/seasons";
-import { setSeasonAction } from "@/app/actions/city";
 import { useEffectiveSeason } from "@/lib/stores/debugStore";
 
 const VILLAGER_CAP = 20;
 
 /**
- * 街並み描画のメインコンポーネント。
- * 一画面 = 一時代。`era` プロパティを変えると AnimatePresence で
- * 旧街並みがフェードアウトし、新街並みがフェードインする。
+ * 街並み描画。era / totalActiveDays / season を受け取って描く純粋ビュー。
+ * 永続化や季節セレクタは含まない(親が責任を持つ)。
  *
- * 将来の振り返り画面では、過去の era を渡せば過去の街を再現できる。
+ * 振り返り画面では、過去の era と過去の totalActiveDays を渡すことで
+ * 「過去の自分の街」を再現できる。
  */
 export function CityScene({
   userId,
   era,
   totalActiveDays,
-  initialSeason,
+  season,
   newlyBuiltIndex,
   newlyArrivedVillager,
 }: {
   userId: string;
   era: Era;
   totalActiveDays: number;
-  initialSeason: Season;
+  /** 現在表示する季節(controlled) */
+  season: Season;
   /** チェック完了直後の建物 index(ボイーン対象)。null なら無し。 */
   newlyBuiltIndex?: number | null;
   /** Day 7 演出後の新規住人 index */
   newlyArrivedVillager?: number | null;
 }) {
-  const [season, setSeason] = useState<Season>(initialSeason);
   const effective = useEffectiveSeason(season);
   const theme = SEASON_THEME[effective];
 
@@ -66,49 +65,38 @@ export function CityScene({
   );
 
   return (
-    <div className="space-y-3">
-      <div
-        className="relative w-full overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800"
-        style={{
-          height: 280,
-          background: `linear-gradient(to bottom, ${theme.sky} 0%, ${theme.sky} 70%, ${theme.ground} 70%, ${theme.ground} 100%)`,
-        }}
-      >
-        <SeasonOverlay season={effective} />
+    <div
+      className="relative w-full overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800"
+      style={{
+        height: 280,
+        background: `linear-gradient(to bottom, ${theme.sky} 0%, ${theme.sky} 70%, ${theme.ground} 70%, ${theme.ground} 100%)`,
+      }}
+    >
+      <SeasonOverlay season={effective} />
 
-        {/* 建物列(era ごとにキー切り替えで差し替え) */}
-        <div className="absolute inset-x-0 bottom-0 h-[78%]">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={era}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.4 }}
-              style={{ position: "absolute", inset: 0 }}
-            >
-              <BuildingRow
-                buildings={buildings}
-                newlyBuiltIndex={newlyBuiltIndex}
-              />
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* 住人(era で色が変わるが、配置は同じ) */}
-        <VillagerLayer
-          placements={placements}
-          newlyArrivedVillager={newlyArrivedVillager}
-        />
+      {/* 建物列(era ごとにキー切り替えで差し替え) */}
+      <div className="absolute inset-x-0 bottom-0 h-[78%]">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={era}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            style={{ position: "absolute", inset: 0 }}
+          >
+            <BuildingRow
+              buildings={buildings}
+              newlyBuiltIndex={newlyBuiltIndex}
+            />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {/* 季節切り替え */}
-      <SeasonSwitcher
-        current={season}
-        onChange={(s) => {
-          setSeason(s);
-          setSeasonAction(s);
-        }}
+      {/* 住人(era で色が変わるが、配置は同じ) */}
+      <VillagerLayer
+        placements={placements}
+        newlyArrivedVillager={newlyArrivedVillager}
       />
     </div>
   );
@@ -303,7 +291,10 @@ function VillagerLayer({
   );
 }
 
-function SeasonSwitcher({
+/**
+ * 季節セレクタ。永続化は親に委ねる(onChange 内で各自必要なら setSeasonAction を呼ぶ)。
+ */
+export function SeasonSwitcher({
   current,
   onChange,
 }: {
