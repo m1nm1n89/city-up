@@ -12,7 +12,7 @@ Claude Code への各フェーズの指示書をここに保管。
 | 3 | PHASE3_city_ui.md | ✅完了 | 街並みUI + マイルストーン + メンター |
 | 3-Fix | PHASE3_FIX_era_display.md | ✅完了 | 時代表示ルールの修正(1画面1時代) |
 | 4-A | PHASE4A_reflection.md | ✅完了 | 振り返り画面 + 過去比較 |
-| 4-B | PHASE4B_share_card.md | ⏳未着手 | シェアカード + 月次サマリー |
+| 4-B | PHASE4B_share_card.md | ✅完了 | シェアカード + 月次サマリー |
 | 5 | PHASE5_deploy.md | ⏳未着手 | Cloudflare Workers 本番デプロイ |
 
 ## 使い方

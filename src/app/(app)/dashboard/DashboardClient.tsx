@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CityScene, SeasonSwitcher } from "@/components/city/CityScene";
 import { MilestoneOverlay } from "@/components/city/MilestoneOverlay";
 import { MentorPanel } from "@/components/mentor/MentorPanel";
 import { DailyChecks } from "@/components/checkboxes/DailyChecks";
+import { ShareCardModal } from "@/components/share/ShareCardModal";
+import { MilestoneToast } from "@/components/toast/MilestoneToast";
 import { setSeasonAction } from "@/app/actions/city";
 import { useMentorStore } from "@/lib/stores/mentorStore";
+import { useShareModalStore } from "@/lib/stores/shareModalStore";
 import {
   useDebugStore,
   useEffectiveDay,
@@ -37,6 +40,8 @@ type Props = {
   selectedItems: Checkbox[];
   initialChecks: Record<string, boolean>;
   initialDayCoins: number;
+  /** /dashboard?shareMonth=YYYY-MM で渡される。マウント時に1回だけ自動で共有モーダルを開く。 */
+  autoOpenShareMonth: string | null;
 };
 
 export function DashboardClient(props: Props) {
@@ -46,8 +51,11 @@ export function DashboardClient(props: Props) {
   const [newlyBuiltIndex, setNewlyBuiltIndex] = useState<number | null>(null);
   const [newlyArrivedVillager, setNewlyArrivedVillager] = useState<number | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDay | null>(null);
+  const [toastMilestone, setToastMilestone] = useState<MilestoneDay | null>(null);
+  const shownToasts = useRef<Set<MilestoneDay>>(new Set());
   const fire = useMentorStore((s) => s.fire);
   const consumeForced = useDebugStore((s) => s.consumeForcedMilestone);
+  const openShareModal = useShareModalStore((s) => s.openShareModal);
 
   // 初回マウント: ようこそ / おかえり 系の挨拶
   useEffect(() => {
@@ -92,11 +100,51 @@ export function DashboardClient(props: Props) {
     }
   }, [activeMilestone]);
 
+  // 月次入力完了からのリダイレクトで shareMonth が渡されていれば、
+  // 一度だけ共有モーダルを自動で開く(以後リロードで再発火しないよう URL を綺麗にする)。
+  const handledAutoShare = useRef(false);
+  useEffect(() => {
+    if (handledAutoShare.current) return;
+    const ym = props.autoOpenShareMonth;
+    if (!ym) return;
+    handledAutoShare.current = true;
+    openShareModal({ day, period: ym });
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("shareMonth");
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // history が無い環境(SSR の theoretical な経路)では何もしない
+    }
+  }, [props.autoOpenShareMonth, day, openShareModal]);
+
+  // マイルストーン演出完了から 2秒後にシェア提案トーストを出す。
+  // セッション内で同じ Day は1度しか出さない。
+  useEffect(() => {
+    if (activeMilestone == null) return;
+    if (shownToasts.current.has(activeMilestone)) return;
+    const overlayMs = activeMilestone >= 30 ? 2400 : 1600;
+    const t = setTimeout(() => {
+      shownToasts.current.add(activeMilestone);
+      setToastMilestone(activeMilestone);
+    }, overlayMs + 2000);
+    return () => clearTimeout(t);
+  }, [activeMilestone]);
+
   const milestoneList = useMemo(() => ALL_MILESTONE_DAYS, []);
 
   return (
     <>
       <MilestoneOverlay activeDay={activeMilestone} />
+      <ShareCardModal />
+      <MilestoneToast
+        day={toastMilestone}
+        onShare={() => {
+          setToastMilestone(null);
+          openShareModal({ day });
+        }}
+        onDismiss={() => setToastMilestone(null)}
+      />
 
       <div className="space-y-3">
         <CityScene

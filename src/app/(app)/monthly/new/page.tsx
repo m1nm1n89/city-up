@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MonthlyForm } from "@/components/monthly/MonthlyForm";
 import { getJstContext, previousYearMonth } from "@/lib/date/week";
+import { computeDay } from "@/lib/city/milestones";
 
 export default async function MonthlyNewPage(props: {
   searchParams: Promise<{ ym?: string }>;
@@ -20,7 +21,7 @@ export default async function MonthlyNewPage(props: {
   // 未来月は不可
   if (targetYm > yearMonth) redirect("/dashboard");
 
-  const [{ data: current }, { data: prev }] = await Promise.all([
+  const [{ data: current }, { data: prev }, { data: profile }] = await Promise.all([
     supabase
       .from("monthly_stats")
       .select(
@@ -37,7 +38,17 @@ export default async function MonthlyNewPage(props: {
       .eq("user_id", user.id)
       .eq("year_month", previousYearMonth(targetYm))
       .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("started_at")
+      .eq("id", user.id)
+      .single(),
   ]);
+
+  const today = getJstContext().today;
+  const currentDay = profile?.started_at
+    ? computeDay({ startedAtIso: profile.started_at, todayJst: today })
+    : 1;
 
   const toStrings = (
     r:
@@ -67,6 +78,7 @@ export default async function MonthlyNewPage(props: {
           yearMonth={targetYm}
           initial={toStrings(current)}
           previous={toStrings(prev)}
+          currentDay={currentDay}
         />
       </div>
     </main>

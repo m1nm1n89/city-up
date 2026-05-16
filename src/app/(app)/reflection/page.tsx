@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { GlobalNav } from "@/components/nav/GlobalNav";
+import { ShareButton } from "@/components/share/ShareButton";
 import { computeDay } from "@/lib/city/milestones";
 import { startedAtToYmd } from "@/lib/city/snapshot";
 import { getJstContext } from "@/lib/date/week";
@@ -78,7 +79,10 @@ export default async function ReflectionPage() {
               {profile.username} さん · 振り返り(Day {currentDay})
             </p>
           </div>
-          <LogoutButton />
+          <div className="flex items-center gap-2">
+            <ShareButton day={currentDay} />
+            <LogoutButton />
+          </div>
         </div>
         <GlobalNav />
       </header>

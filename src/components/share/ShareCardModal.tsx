@@ -1,0 +1,225 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useShareModalStore } from "@/lib/stores/shareModalStore";
+import {
+  APP_URL,
+  buildShareText,
+  type ShareCardSize,
+} from "@/lib/share/constants";
+
+type ImageState =
+  | { status: "loading" }
+  | { status: "ready"; url: string; blob: Blob }
+  | { status: "error"; message: string };
+
+function buildCardUrl(size: ShareCardSize, period: string | null): string {
+  const qs = new URLSearchParams({ size });
+  if (period) qs.set("period", period);
+  // キャッシュ衝突回避(同一セッションで再生成しても新鮮なPNGを取りに行く)
+  qs.set("_", String(Date.now()));
+  return `/api/share-card?${qs.toString()}`;
+}
+
+async function loadImage(
+  size: ShareCardSize,
+  period: string | null,
+): Promise<ImageState> {
+  try {
+    const res = await fetch(buildCardUrl(size, period), {
+      credentials: "include",
+    });
+    if (!res.ok) {
+      return {
+        status: "error",
+        message: `画像の生成に失敗しました(${res.status})`,
+      };
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    return { status: "ready", url, blob };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "ネットワークエラー",
+    };
+  }
+}
+
+export function ShareCardModal() {
+  const open = useShareModalStore((s) => s.open);
+  const day = useShareModalStore((s) => s.day);
+  const period = useShareModalStore((s) => s.period);
+  const close = useShareModalStore((s) => s.closeShareModal);
+
+  const [selected, setSelected] = useState<ShareCardSize>("landscape");
+  const [landscape, setLandscape] = useState<ImageState>({ status: "loading" });
+  const [square, setSquare] = useState<ImageState>({ status: "loading" });
+
+  // モーダルが開く度に画像を取り直し、閉じる時に blob URL を破棄
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLandscape({ status: "loading" });
+    setSquare({ status: "loading" });
+    void loadImage("landscape", period).then((r) => {
+      if (!cancelled) setLandscape(r);
+    });
+    void loadImage("square", period).then((r) => {
+      if (!cancelled) setSquare(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, period]);
+
+  // モーダルクローズ時に古い blob を解放
+  useEffect(() => {
+    return () => {
+      if (landscape.status === "ready") URL.revokeObjectURL(landscape.url);
+      if (square.status === "ready") URL.revokeObjectURL(square.url);
+    };
+  }, [landscape, square]);
+
+  // ESC でクローズ
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, close]);
+
+  if (!open) return null;
+
+  const current = selected === "landscape" ? landscape : square;
+
+  function downloadCurrent() {
+    if (current.status !== "ready") return;
+    const a = document.createElement("a");
+    a.href = current.url;
+    a.download = `cityup_day${day}_${selected}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function shareOnX() {
+    const text = buildShareText(day);
+    const url = APP_URL;
+    const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    window.open(intent, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      <div className="w-full max-w-2xl rounded-xl bg-white dark:bg-gray-900 shadow-2xl p-5 space-y-4">
+        <header className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">シェアカード</h2>
+            <p className="text-xs text-gray-500">
+              Day {day}
+              {period ? ` · ${period}` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="閉じる"
+            className="rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="flex gap-1 text-xs">
+          <SizeTab
+            active={selected === "landscape"}
+            onClick={() => setSelected("landscape")}
+            label="X 用 16:9"
+          />
+          <SizeTab
+            active={selected === "square"}
+            onClick={() => setSelected("square")}
+            label="Instagram / note 用 1:1"
+          />
+        </div>
+
+        <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden bg-gray-50 dark:bg-gray-950 min-h-[200px] flex items-center justify-center">
+          {current.status === "loading" && (
+            <p className="text-sm text-gray-500 py-12">作っています…</p>
+          )}
+          {current.status === "error" && (
+            <p className="text-sm text-red-500 py-12">{current.message}</p>
+          )}
+          {current.status === "ready" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={current.url}
+              alt={`シェアカード ${selected}`}
+              className="w-full h-auto block"
+            />
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-md border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm"
+          >
+            閉じる
+          </button>
+          <button
+            type="button"
+            onClick={shareOnX}
+            disabled={current.status !== "ready"}
+            className="rounded-md border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            X で共有
+          </button>
+          <button
+            type="button"
+            onClick={downloadCurrent}
+            disabled={current.status !== "ready"}
+            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-1.5 text-sm font-medium disabled:opacity-40"
+          >
+            ダウンロード
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SizeTab({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 border transition ${
+        active
+          ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
+          : "border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}

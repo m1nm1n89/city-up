@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { GlobalNav } from "@/components/nav/GlobalNav";
+import { ShareButton } from "@/components/share/ShareButton";
 import { ReminderBanner } from "@/components/banners/ReminderBanner";
 import { MonthlyOverdueModal } from "@/components/banners/MonthlyOverdueModal";
 import { DashboardClient } from "./DashboardClient";
@@ -25,7 +26,13 @@ import type { Season } from "@/lib/city/seasons";
 import type { Era } from "@/lib/city/eras";
 import type { MentorTrigger } from "@/lib/mentor/messages";
 
-export default async function DashboardPage() {
+export default async function DashboardPage(props: {
+  searchParams?: Promise<{ shareMonth?: string }>;
+}) {
+  const sp = props.searchParams ? await props.searchParams : {};
+  const shareMonth =
+    sp.shareMonth && /^\d{4}-\d{2}$/.test(sp.shareMonth) ? sp.shareMonth : null;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -185,7 +192,10 @@ export default async function DashboardPage() {
               {profile?.username} さん · <DayBadge serverDay={day} />
             </p>
           </div>
-          <LogoutButton />
+          <div className="flex items-center gap-2">
+            <ShareButton day={day} />
+            <LogoutButton />
+          </div>
         </div>
         <GlobalNav />
       </header>
@@ -245,6 +255,7 @@ export default async function DashboardPage() {
         selectedItems={selectedItems}
         initialChecks={initialChecks}
         initialDayCoins={initialDayCoins}
+        autoOpenShareMonth={shareMonth}
       />
 
       {/* 今週の目標 */}

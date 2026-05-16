@@ -5,6 +5,7 @@ import { CityScene, SeasonSwitcher } from "@/components/city/CityScene";
 import { EraSlider } from "@/components/reflection/EraSlider";
 import { ProgressSlider } from "@/components/reflection/ProgressSlider";
 import { ComparisonSection } from "@/components/reflection/ComparisonSection";
+import { ShareCardModal } from "@/components/share/ShareCardModal";
 import { ERA_UNLOCK_DAY, eraAt, type Era } from "@/lib/city/eras";
 import { snapshotAtDay } from "@/lib/city/snapshot";
 import type { Season } from "@/lib/city/seasons";
@@ -57,6 +58,7 @@ export function ReflectionClient(props: Props) {
 
   return (
     <div className="space-y-5">
+      <ShareCardModal />
       <section className="space-y-3">
         <div className="relative">
           <CityScene

@@ -37,8 +37,11 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.includes(pathname);
+  const isApi = pathname.startsWith("/api/");
 
-  if (!user && !isPublic) {
+  // API ルートは middleware でリダイレクトしない(ハンドラ自身が 401 を返す)。
+  // セッション cookie のリフレッシュは上の getUser() で既に行われている。
+  if (!user && !isPublic && !isApi) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

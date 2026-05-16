@@ -16,10 +16,13 @@ export function MonthlyForm({
   yearMonth,
   initial,
   previous,
+  currentDay,
 }: {
   yearMonth: string;
   initial?: Stats | null;
   previous?: Stats | null;
+  /** Day 90 以降なら入力完了後にシェアカードを自動表示 */
+  currentDay: number;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<Stats>(
@@ -61,8 +64,12 @@ export function MonthlyForm({
         return;
       }
       setResultMsg(`記録しました。残高 ${res.data.currentCoins} コイン`);
+      const autoShare = currentDay >= 90;
+      const dest = autoShare
+        ? `/dashboard?shareMonth=${encodeURIComponent(yearMonth)}`
+        : "/dashboard";
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push(dest);
         router.refresh();
       }, 1200);
     });
