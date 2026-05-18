@@ -165,17 +165,27 @@ export async function GET(req: NextRequest) {
     fonts = [
       { name: "Noto Sans JP", data: fontData, weight: 400, style: "normal" },
     ];
-  } catch {
-    // フォント無しで継続(Satori 既定の Inter が使われる、日本語は □ になる)
+  } catch (e) {
+    console.error("[share-card] JP font load failed:", e);
   }
 
-  return new ImageResponse(element, {
-    width: dims.width,
-    height: dims.height,
-    fonts,
-    headers: {
-      // 自分にしか役立たない・短時間で再生成して欲しい性質なので private 5 分。
-      "Cache-Control": "private, max-age=300",
-    },
-  });
+  try {
+    return new ImageResponse(element, {
+      width: dims.width,
+      height: dims.height,
+      fonts,
+      headers: {
+        // 自分にしか役立たない・短時間で再生成して欲しい性質なので private 5 分。
+        "Cache-Control": "private, max-age=300",
+      },
+    });
+  } catch (e) {
+    // Satori の例外を可視化(dev でレスポンス本文から原因を読めるように)
+    const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    console.error("[share-card] ImageResponse failed:", e);
+    return new Response(`share-card failed: ${msg}`, {
+      status: 500,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
 }
