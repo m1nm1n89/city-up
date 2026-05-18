@@ -14,6 +14,7 @@
 
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createClient } from "@/lib/supabase/server";
 import { ShareCardLandscape } from "@/components/share/ShareCardLandscape";
 import { ShareCardSquare } from "@/components/share/ShareCardSquare";
@@ -32,20 +33,48 @@ export const runtime = "nodejs";
 
 const VILLAGER_CAP = 20;
 
-// Noto Sans JP OTF を public/fonts/ から読み、isolate(またはプロセス)寿命の間キャッシュする。
-// dev でも prod(Cloudflare Workers static assets)でも同じ /fonts/... パスで取れる。
+// Noto Sans JP OTF をロードして isolate(またはプロセス)寿命の間キャッシュする。
+//
+// 注意: Cloudflare Workers 内から `fetch('/fonts/...')` で **自分自身**を叩くと、
+// run_worker_first 設定が効いて Worker に戻り、自己再帰 → hang する。
+// なので Workers 側では ASSETS binding を直接叩く経路を使い、
+// Next.js dev(Node.js ランタイム)では通常の fetch にフォールバックする。
 let jpFontPromise: Promise<ArrayBuffer> | null = null;
-function loadJpFont(origin: string): Promise<ArrayBuffer> {
+function loadJpFont(reqUrl: string): Promise<ArrayBuffer> {
   if (!jpFontPromise) {
-    jpFontPromise = fetch(`${origin}/fonts/NotoSansJP-Regular.otf`).then(
-      async (r) => {
-        if (!r.ok) {
-          jpFontPromise = null; // 失敗時は次回再試行できるよう破棄
-          throw new Error(`failed to load JP font (${r.status})`);
+    jpFontPromise = (async () => {
+      // 1) Cloudflare Workers (pnpm preview / 本番): ASSETS binding 経由
+      try {
+        const ctx = getCloudflareContext();
+        const assets = (
+          ctx?.env as
+            | { ASSETS?: { fetch: (req: Request) => Promise<Response> } }
+            | undefined
+        )?.ASSETS;
+        if (assets) {
+          const resp = await assets.fetch(
+            new Request(
+              "https://__assets__.local/fonts/NotoSansJP-Regular.otf",
+            ),
+          );
+          if (!resp.ok) {
+            throw new Error(`ASSETS binding returned ${resp.status}`);
+          }
+          return await resp.arrayBuffer();
         }
-        return r.arrayBuffer();
-      },
-    );
+      } catch {
+        // Workers ランタイムでない or binding 未設定 → 下のフォールバックへ
+      }
+
+      // 2) Next.js dev (Node.js): 通常 fetch
+      const url = new URL("/fonts/NotoSansJP-Regular.otf", reqUrl).toString();
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`dev fetch returned ${resp.status}`);
+      return await resp.arrayBuffer();
+    })().catch((e) => {
+      jpFontPromise = null; // 失敗時は次回再試行できるよう破棄
+      throw e;
+    });
   }
   return jpFontPromise;
 }
@@ -161,7 +190,7 @@ export async function GET(req: NextRequest) {
     style: "normal";
   }> = [];
   try {
-    const fontData = await loadJpFont(url.origin);
+    const fontData = await loadJpFont(req.url);
     fonts = [
       { name: "Noto Sans JP", data: fontData, weight: 400, style: "normal" },
     ];
