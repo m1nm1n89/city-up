@@ -32,6 +32,24 @@ export const runtime = "nodejs";
 
 const VILLAGER_CAP = 20;
 
+// Noto Sans JP OTF を public/fonts/ から読み、isolate(またはプロセス)寿命の間キャッシュする。
+// dev でも prod(Cloudflare Workers static assets)でも同じ /fonts/... パスで取れる。
+let jpFontPromise: Promise<ArrayBuffer> | null = null;
+function loadJpFont(origin: string): Promise<ArrayBuffer> {
+  if (!jpFontPromise) {
+    jpFontPromise = fetch(`${origin}/fonts/NotoSansJP-Regular.otf`).then(
+      async (r) => {
+        if (!r.ok) {
+          jpFontPromise = null; // 失敗時は次回再試行できるよう破棄
+          throw new Error(`failed to load JP font (${r.status})`);
+        }
+        return r.arrayBuffer();
+      },
+    );
+  }
+  return jpFontPromise;
+}
+
 function isValidPeriod(s: string | null): s is string {
   return !!s && /^\d{4}-\d{2}$/.test(s);
 }
@@ -135,9 +153,26 @@ export async function GET(req: NextRequest) {
       <ShareCardSquare {...data} />
     );
 
+  // フォント取得失敗時もカード生成は止めない(英語 fallback で続行)。
+  let fonts: Array<{
+    name: string;
+    data: ArrayBuffer;
+    weight: 400;
+    style: "normal";
+  }> = [];
+  try {
+    const fontData = await loadJpFont(url.origin);
+    fonts = [
+      { name: "Noto Sans JP", data: fontData, weight: 400, style: "normal" },
+    ];
+  } catch {
+    // フォント無しで継続(Satori 既定の Inter が使われる、日本語は □ になる)
+  }
+
   return new ImageResponse(element, {
     width: dims.width,
     height: dims.height,
+    fonts,
     headers: {
       // 自分にしか役立たない・短時間で再生成して欲しい性質なので private 5 分。
       "Cache-Control": "private, max-age=300",

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SIGNUP_ENABLED } from "@/lib/auth/signupGate";
 
 export default function LandingPage() {
   return (
@@ -9,18 +10,29 @@ export default function LandingPage() {
           発信を通して挑戦している人のための、毎日3秒で続ける継続支援アプリ。
           数字が動かない時期も、街が育っていく。
         </p>
+        {!SIGNUP_ENABLED && (
+          <p className="text-xs text-gray-500">
+            現在はクローズドベータ中です。
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
-        <Link
-          href="/signup"
-          className="flex-1 text-center rounded-md bg-black px-4 py-3 text-white font-medium hover:opacity-90 dark:bg-white dark:text-black"
-        >
-          はじめる
-        </Link>
+        {SIGNUP_ENABLED && (
+          <Link
+            href="/signup"
+            className="flex-1 text-center rounded-md bg-black px-4 py-3 text-white font-medium hover:opacity-90 dark:bg-white dark:text-black"
+          >
+            はじめる
+          </Link>
+        )}
         <Link
           href="/login"
-          className="flex-1 text-center rounded-md border border-gray-300 dark:border-gray-700 px-4 py-3 font-medium hover:bg-gray-50 dark:hover:bg-gray-900"
+          className={`flex-1 text-center rounded-md px-4 py-3 font-medium ${
+            SIGNUP_ENABLED
+              ? "border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900"
+              : "bg-black text-white hover:opacity-90 dark:bg-white dark:text-black"
+          }`}
         >
           ログイン
         </Link>

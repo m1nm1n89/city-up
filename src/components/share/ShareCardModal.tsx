@@ -105,9 +105,37 @@ export function ShareCardModal() {
     a.remove();
   }
 
-  function shareOnX() {
+  async function shareOnX() {
+    if (current.status !== "ready") return;
     const text = buildShareText(day);
     const url = APP_URL;
+
+    // モバイル等で Web Share API が使えるなら、画像付きでネイティブシートを優先。
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        const file = new File(
+          [current.blob],
+          `cityup_day${day}_${selected}.png`,
+          { type: "image/png" },
+        );
+        const canShareFiles =
+          typeof navigator.canShare === "function" &&
+          navigator.canShare({ files: [file] });
+        if (canShareFiles) {
+          await navigator.share({ files: [file], text, url });
+          return;
+        }
+        // 画像非対応のシートでもテキスト共有はできるなら使う
+        await navigator.share({ text, url });
+        return;
+      } catch (err) {
+        // ユーザーがキャンセル → 何もしない
+        if ((err as { name?: string })?.name === "AbortError") return;
+        // それ以外は X intent にフォールバック
+      }
+    }
+
+    // フォールバック: X の intent ページを別タブで開く(画像は手動添付)
     const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     window.open(intent, "_blank", "noopener,noreferrer");
   }

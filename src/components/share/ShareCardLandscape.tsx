@@ -2,8 +2,9 @@
  * 16:9 横長のシェアカードレイアウト(1200x675)。
  * Satori 互換: Flexbox のみ、絶対配置・アニメーションなし。
  *
- * ASCII テキストに統一して Satori デフォルトフォント(Inter)で確実に出る形にしている。
- * Japanese 化が必要になったら fonts: option で Noto Sans JP 等を渡す。
+ * 日本語は route 側で渡す Noto Sans JP で描画される。
+ * フォント取得失敗時は Satori デフォルトの Inter にフォールバックするので、
+ * その場合は日本語が □ になる(機能停止はしない)。
  */
 
 import { StaticCityScene } from "./StaticCityScene";
@@ -47,10 +48,10 @@ export function ShareCardLandscape(props: ShareCardData) {
         }}
       >
         <div style={{ display: "flex", fontSize: 56, fontWeight: 700, color: "#222" }}>
-          Month {month}
+          {month} ヶ月目
         </div>
         <div style={{ display: "flex", fontSize: 36, color: "#555" }}>
-          Day {props.day}
+          {props.day} 日目
         </div>
       </div>
 
@@ -87,12 +88,12 @@ export function ShareCardLandscape(props: ShareCardData) {
       >
         <div style={{ display: "flex", fontSize: 24, color: "#444" }}>
           <div style={{ display: "flex", marginRight: 28 }}>
-            Total: {props.totalActiveDays} checks
+            累計 {props.totalActiveDays} 日
           </div>
           <div style={{ display: "flex", marginRight: 28 }}>
-            {props.buildingCount} buildings
+            建物 {props.buildingCount} 棟
           </div>
-          <div style={{ display: "flex" }}>{props.villagerCount} villagers</div>
+          <div style={{ display: "flex" }}>住人 {props.villagerCount} 人</div>
         </div>
         <div style={{ display: "flex", fontSize: 18, color: "#888" }}>
           {host}

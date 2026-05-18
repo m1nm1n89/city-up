@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { loginAction } from "@/lib/auth/actions";
+import { SIGNUP_ENABLED } from "@/lib/auth/signupGate";
 
 export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
@@ -67,10 +68,14 @@ export function LoginForm() {
         {isPending ? "ログイン中…" : "ログイン"}
       </button>
 
-      <div className="flex justify-between text-sm">
-        <Link href="/signup" className="underline">
-          アカウント作成
-        </Link>
+      <div
+        className={`flex text-sm ${SIGNUP_ENABLED ? "justify-between" : "justify-end"}`}
+      >
+        {SIGNUP_ENABLED && (
+          <Link href="/signup" className="underline">
+            アカウント作成
+          </Link>
+        )}
         <Link href="/recover" className="underline text-gray-600 dark:text-gray-400">
           パスワードを忘れた
         </Link>

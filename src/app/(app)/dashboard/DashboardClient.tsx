@@ -27,6 +27,33 @@ import type { Season } from "@/lib/city/seasons";
 import type { MentorTrigger } from "@/lib/mentor/messages";
 import type { Checkbox } from "@/types/db";
 
+const TOAST_SESSION_KEY = "city-up:milestone-toasts-shown";
+
+function readShownToasts(): Set<MilestoneDay> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.sessionStorage.getItem(TOAST_SESSION_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.filter((n): n is MilestoneDay => isMilestoneDay(n)));
+  } catch {
+    return new Set();
+  }
+}
+
+function persistShownToasts(set: Set<MilestoneDay>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      TOAST_SESSION_KEY,
+      JSON.stringify([...set]),
+    );
+  } catch {
+    // QuotaExceeded など。永続化失敗してもメモリ上の Set は有効。
+  }
+}
+
 type Props = {
   userId: string;
   serverDay: number;
@@ -52,7 +79,12 @@ export function DashboardClient(props: Props) {
   const [newlyArrivedVillager, setNewlyArrivedVillager] = useState<number | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDay | null>(null);
   const [toastMilestone, setToastMilestone] = useState<MilestoneDay | null>(null);
+  // sessionStorage と同期する: 同タブのリロードでは再表示しない、
+  // タブを閉じるとリセット。
   const shownToasts = useRef<Set<MilestoneDay>>(new Set());
+  useEffect(() => {
+    shownToasts.current = readShownToasts();
+  }, []);
   const fire = useMentorStore((s) => s.fire);
   const consumeForced = useDebugStore((s) => s.consumeForcedMilestone);
   const openShareModal = useShareModalStore((s) => s.openShareModal);
@@ -126,6 +158,7 @@ export function DashboardClient(props: Props) {
     const overlayMs = activeMilestone >= 30 ? 2400 : 1600;
     const t = setTimeout(() => {
       shownToasts.current.add(activeMilestone);
+      persistShownToasts(shownToasts.current);
       setToastMilestone(activeMilestone);
     }, overlayMs + 2000);
     return () => clearTimeout(t);

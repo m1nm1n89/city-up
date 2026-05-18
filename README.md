@@ -7,11 +7,11 @@
 - **個人情報を持たない**。ユーザーネーム + パスワードだけで認証(内部ではダミーメールに変換して Supabase Auth に渡す)
 - パスワード忘れ救済は **リカバリーコード**(12桁、サインアップ時に一度だけ表示、bcrypt でハッシュ化保存)
 - 全テーブル **RLS 有効・Default Deny**、自分の行のみアクセス可、DELETE は完全禁止
-- 詳細は [`docs/`](./docs/) 配下の MD を参照
+- 詳細は [`docs/knowledge/`](./docs/knowledge/) 配下の MD を参照
 
 ---
 
-## セットアップ
+## セットアップ(ローカル開発)
 
 ### 1. 必要環境
 
@@ -29,9 +29,9 @@ pnpm install
 `pnpm-workspace.yaml` で `minimumReleaseAge: 7200`(=5日)を設定済み。
 **npm/yarn は使わないでください**(サプライチェーン対策が効かなくなります)。
 
-### 3. Supabase プロジェクトの準備
+### 3. 開発用 Supabase プロジェクトの準備
 
-[Supabase Dashboard](https://app.supabase.com/) で新規プロジェクトを作成し、以下を取得します。
+[Supabase Dashboard](https://app.supabase.com/) で新規プロジェクト(例: `city-up-dev`)を作成し、以下を取得します。
 
 - **Project URL**: `Settings → API → Project URL`
 - **anon public key**: `Settings → API → Project API keys → anon public`
@@ -58,59 +58,186 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGc...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
 DUMMY_EMAIL_DOMAIN=dummy.cityup.local
+
+# 開発時はサインアップを開ける
+NEXT_PUBLIC_SIGNUP_ENABLED=true
+
+# デバッグツール(/day-override)を有効化
+NEXT_PUBLIC_DEBUG_MODE=true
 ```
 
 > `SUPABASE_SERVICE_ROLE_KEY` は絶対に `NEXT_PUBLIC_` 接頭辞を付けないでください。
 > service_role は RLS をバイパスする神権限です。クライアントに渡したら全データが漏洩します。
 
-### 6. 初期スキーマの適用
+### 6. マイグレーションの適用
 
-[`supabase/migrations/0001_initial_schema.sql`](./supabase/migrations/0001_initial_schema.sql) を
-Supabase Dashboard の `SQL Editor → New query` に貼り付けて実行します。
+`supabase/migrations/` 配下の SQL を **番号順** に Supabase Dashboard の
+`SQL Editor → New query` に貼り付けて実行します。
 
-実行後、`Database → Tables` で以下のテーブルが作成され、
-すべて `RLS enabled` になっていることを確認してください。
+| 順 | ファイル | 内容 |
+|---|---|---|
+| 1 | `0001_initial_schema.sql` | 初期テーブル + RLS(Default Deny) |
+| 2 | `0002_coin_logic.sql` | コイン RPC・SECURITY DEFINER で改ざん耐性 |
+| 3 | `0003_season_and_era.sql` | 季節列追加 + `set_season` / `set_current_era` RPC |
+| 4 | `0004_fix_apply_coin_target.sql` | 0→1→0→1 バグの修正 |
 
-- `profiles`
-- `user_settings`
-- `daily_checks`
-- `weekly_goals`
-- `monthly_stats`
-- `coin_balance`
-- `milestone_progress`
+実行後、`Database → Tables` で **全 8 テーブル**(`profiles` / `user_settings` /
+`daily_checks` / `weekly_goals` / `monthly_stats` / `coin_balance` /
+`milestone_progress` / `coin_transactions`)が `RLS enabled` になっていることを確認してください。
 
----
-
-## 開発
+### 7. 開発サーバ起動
 
 ```bash
 pnpm dev          # 開発サーバ (http://localhost:3000)
 pnpm typecheck    # 型チェック
 pnpm lint         # ESLint
-pnpm build        # プロダクションビルド
+pnpm build        # Next.js プロダクションビルド(Workers 用ではない)
 ```
 
 ---
 
-## デプロイ(Cloudflare Workers)
+## ローカルでの Cloudflare Workers 本番ビルド検証
 
-このフェーズでは **設定ファイルの準備のみ** が完了しています。実際のデプロイは次フェーズで行います。
+実際のデプロイ前に、`pnpm preview` で OpenNext バンドル + wrangler を使ってローカル動作確認します。
+
+### 1. `.dev.vars` の準備
+
+wrangler は `.env.local` を読まないので、`.dev.vars` を別途用意します。
 
 ```bash
-pnpm preview      # ローカルで OpenNext + Workers を試す
-pnpm deploy       # Cloudflare にデプロイ
+cp .env.local .dev.vars
 ```
 
-デプロイ前に環境変数をシークレットとして登録します。
+中身は `.env.local` とほぼ同じでよいですが、サインアップを開けたい場合は
+`NEXT_PUBLIC_SIGNUP_ENABLED=true` を入れます。サンプルは [`.dev.vars.example`](./.dev.vars.example) を参照。
+
+> `.dev.vars` は `.gitignore` 済み。コミットしないでください。
+
+### 2. プレビュー起動
+
+```bash
+pnpm preview
+```
+
+`opennextjs-cloudflare build && opennextjs-cloudflare preview` の合成です。
+ビルド後 wrangler のローカルサーバ(通常 http://localhost:8787)が起動します。
+
+### 3. 検証チェック項目
+
+- サインアップ → リカバリーコード表示 → ログイン → ログアウト
+- チェックボックス入力 → コイン獲得
+- 週次目標 → 進捗記入
+- 月次成果入力
+- 街並み表示(マイルストーン演出含む)
+- 振り返り画面(時代スライダー / 進捗スライダー / 過去比較)
+- シェアカード生成(16:9 / 1:1)・Noto Sans JP で日本語が出ているか
+- マイルストーン提案トースト(リロードで再表示されないか)
+- 月次自動シェアカード生成(Day 90 以降)
+
+### 0→1→0→1 リグレッションテスト(必須)
+
+`0004` マイグレーションで修正済みのバグの再発防止チェック。
+
+1. 今日のチェックを 3 つ全部 ON → コイン 4
+2. 全部 OFF → コイン 0
+3. 全部 ON → **エラーなしで** コイン 4
+4. 何度も繰り返してもエラーが出ない
+
+エラーが出た場合は [`docs/prompts/CLAUDE_CODE_PROMPT_PHASE5.md`](./docs/prompts/CLAUDE_CODE_PROMPT_PHASE5.md) の
+「詰まった場合のデバッグ方法」セクションを参照してください。
+
+---
+
+## 本番デプロイ(Cloudflare Workers)
+
+### 1. 本番用 Supabase プロジェクト
+
+開発用とは **別の Supabase プロジェクト** を新規作成します(`city-up-prod` 推奨、リージョン Tokyo)。
+
+- 開発用と同じ 4 つのマイグレーション(0001 → 0004)を順番に適用
+- メール確認を OFF
+- 全テーブルで RLS が有効か確認(Database → Tables の `RLS` 列が全て緑)
+- 3 つのキー(URL / anon / service_role)を取得
+
+### 2. wrangler secret の登録
 
 ```bash
 wrangler secret put NEXT_PUBLIC_SUPABASE_URL
 wrangler secret put NEXT_PUBLIC_SUPABASE_ANON_KEY
 wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+wrangler secret put DUMMY_EMAIL_DOMAIN
+# 本番ドメインを入れる場合のみ
+wrangler secret put NEXT_PUBLIC_APP_URL
+# サインアップを開ける場合のみ
+wrangler secret put NEXT_PUBLIC_SIGNUP_ENABLED
 ```
 
-> Next.js コードで `export const runtime = "edge"` を使わないこと。
-> `@opennextjs/cloudflare` は Node.js runtime のみ対応。
+`NEXT_PUBLIC_DEBUG_MODE` は **絶対に登録しないこと**。本番ビルドでは
+`NODE_ENV !== "development"` で完全に無効化されますが、保険のためにも未設定が望ましい。
+
+### 3. デプロイ実行
+
+```bash
+pnpm deploy
+```
+
+完了すると `https://city-up.<your-subdomain>.workers.dev` が払い出されます。
+
+### 4. 本番動作確認
+
+- 上記「検証チェック項目」と同じ流れを本番 URL で実施
+- サインアップが **無効化されている**(`NEXT_PUBLIC_SIGNUP_ENABLED=true` を secret に入れない限り「クローズドベータ中」表示)
+- 既存アカウント(事前に作っておく)でログインできる
+- 0→1→0→1 リグレッションテスト
+
+---
+
+## サインアップゲート
+
+`NEXT_PUBLIC_SIGNUP_ENABLED` 環境変数で開閉します(デフォルト = 閉じる)。
+
+| 値 | 挙動 |
+|---|---|
+| (未設定) または `"false"` | サインアップ画面 / リンクが「クローズドベータ中」表示に切り替わる |
+| `"true"` | 通常のサインアップフォームが表示される |
+
+本番でアカウント作成したい場合は **先にローカルでアカウントを作成し、
+本番 Supabase の `auth.users` に同じユーザーを INSERT する**か、
+一時的にフラグを true にしてサインアップ → 即 false に戻す運用にしてください。
+
+---
+
+## 運用
+
+### ログ確認
+
+Cloudflare Workers のリアルタイムログ:
+
+```bash
+wrangler tail
+```
+
+ダッシュボード(集計):
+
+- Cloudflare Dashboard → Workers & Pages → 該当 Worker → Logs / Analytics
+- Supabase Dashboard → Database → Logs(PostgreSQL クエリログ)
+
+### 障害対応の見方
+
+- クライアント側エラー: ブラウザ DevTools → Console / Network
+- サーバー側エラー: `wrangler tail` または Cloudflare Workers Analytics
+- DB エラー: Supabase Dashboard → Database → Logs
+- 認証エラー: Supabase Dashboard → Authentication → Logs
+
+---
+
+## デバッグツール
+
+`/day-override` で Day 数とマイルストーン演出を強制発火できます。
+DB は一切書き換えず、クライアント側ストア(`debugStore`)に override 値を入れるだけ。
+
+**有効化条件**: `NODE_ENV === "development"` **かつ** `NEXT_PUBLIC_DEBUG_MODE === "true"`。
+本番ビルドでは tree-shake により完全に消えます([`src/lib/debug/enabled.ts`](./src/lib/debug/enabled.ts) 参照)。
 
 ---
 
@@ -118,78 +245,63 @@ wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 
 ```
 .
-├── docs/                              # ナレッジ MD(編集しない)
+├── docs/
+│   ├── knowledge/                       # 仕様 / 認証セキュリティ MD
+│   └── prompts/                         # 各フェーズの Claude Code 指示書
+├── public/
+│   └── fonts/
+│       └── NotoSansJP-Regular.otf       # シェアカード用日本語フォント
 ├── src/
 │   ├── app/
-│   │   ├── (auth)/                    # 認証画面(layout 共通)
-│   │   │   ├── signup/page.tsx
-│   │   │   ├── login/page.tsx
-│   │   │   └── recover/page.tsx
-│   │   ├── (app)/
-│   │   │   └── dashboard/page.tsx     # 認証後のホーム(仮実装)
+│   │   ├── (auth)/                      # サインアップ / ログイン / リカバリー
+│   │   ├── (app)/                       # 認証後の画面
+│   │   │   ├── dashboard/               # ホーム(街並み + チェック)
+│   │   │   ├── reflection/              # 振り返り画面(時代/進捗スライダー + 過去比較)
+│   │   │   ├── monthly/new/             # 月次成果入力
+│   │   │   ├── weekly/{new,progress}/   # 週次目標
+│   │   │   ├── settings/checkboxes/     # チェック候補編集
+│   │   │   └── onboarding/              # 初回オンボーディング
+│   │   ├── (debug)/day-override/        # 開発時のみ有効なデバッグ画面
+│   │   ├── api/share-card/route.tsx     # シェアカード PNG 生成 (next/og)
+│   │   ├── actions/                     # サーバーアクション群
 │   │   ├── layout.tsx
-│   │   ├── page.tsx                   # ランディング
+│   │   ├── page.tsx                     # ランディング
 │   │   └── globals.css
-│   ├── middleware.ts                  # 全リクエストでセッション更新
-│   ├── lib/
-│   │   ├── supabase/
-│   │   │   ├── client.ts              # ブラウザ用クライアント
-│   │   │   ├── server.ts              # Server Component / Action 用
-│   │   │   ├── middleware.ts          # セッション更新ロジック
-│   │   │   └── admin.ts               # service_role(サーバー専用)
-│   │   ├── auth/
-│   │   │   ├── constants.ts           # ダミードメイン、パスワードルール
-│   │   │   ├── recovery.ts            # リカバリーコード生成/ハッシュ/検証
-│   │   │   ├── validators.ts          # username / password バリデーション
-│   │   │   └── actions.ts             # Server Actions
-│   │   └── stores/                    # Zustand(空)
+│   ├── middleware.ts
 │   ├── components/
-│   │   └── auth/                      # 認証フォーム類
+│   │   ├── auth/                        # 認証フォーム類
+│   │   ├── city/                        # 街並み描画(live)
+│   │   ├── share/                       # 静止画街並み + シェアカード
+│   │   ├── reflection/                  # スライダー + 過去比較
+│   │   ├── nav/                         # GlobalNav
+│   │   ├── toast/                       # MilestoneToast
+│   │   ├── checkboxes/                  # 日次チェック
+│   │   ├── monthly/                     # 月次フォーム
+│   │   ├── goals/                       # 目標 / 進捗フォーム
+│   │   ├── banners/                     # 催促バナー
+│   │   └── mentor/                      # メンターコメント
+│   ├── lib/
+│   │   ├── supabase/                    # client / server / middleware / admin
+│   │   ├── auth/                        # 定数 / バリデータ / actions / signupGate
+│   │   ├── city/                        # 時代 / 配置 / マイルストーン / snapshot
+│   │   ├── coins/                       # コイン計算
+│   │   ├── date/                        # JST 日付ヘルパー
+│   │   ├── debug/                       # debug enabled ガード
+│   │   ├── mentor/                      # メンターメッセージ engine
+│   │   ├── reflection/                  # 過去比較ロジック
+│   │   ├── share/                       # 共有カード定数
+│   │   ├── stats/                       # streak 集計
+│   │   └── stores/                      # Zustand(mentor / debug / shareModal)
 │   └── types/
 ├── supabase/migrations/
-│   └── 0001_initial_schema.sql        # 初期スキーマ + RLS
-├── pnpm-workspace.yaml                # サプライチェーン対策
-├── wrangler.jsonc
-├── open-next.config.ts
-├── next.config.ts
-├── tailwind.config.ts
-├── postcss.config.mjs
-├── eslint.config.mjs
-└── tsconfig.json
+│   ├── 0001_initial_schema.sql
+│   ├── 0002_coin_logic.sql
+│   ├── 0003_season_and_era.sql
+│   └── 0004_fix_apply_coin_target.sql
+├── pnpm-workspace.yaml                  # サプライチェーン対策
+├── wrangler.jsonc                       # Cloudflare Workers 設定
+├── open-next.config.ts                  # OpenNext 設定
+├── .dev.vars.example                    # wrangler 用環境変数のサンプル
+├── .env.local.example
+└── package.json
 ```
-
----
-
-## このフェーズの完了範囲
-
-- [x] プロジェクトセットアップ + サプライチェーン対策
-- [x] Supabase クライアント(SSR 対応)
-- [x] 認証(サインアップ / ログイン / リカバリー / ログアウト)
-- [x] DB スキーマ + RLS(初期 7 テーブル + coin_transactions = 8 テーブル)
-- [x] 入力ロジック(チェック/週次/月次)とコインシステム(RPC 経由・改ざん耐性)
-- [x] 街並み UI(時代別建物、季節エフェクト、住人 NPC、マイルストーン演出)
-- [x] メンターコメント機能
-- [x] Cloudflare Workers 設定ファイル
-
----
-
-## デバッグツール(フェーズ3完了時に削除する)
-
-`/day-override` は開発時に Day 数やマイルストーン演出を強制発火するためのツールです。
-**`NODE_ENV=development` かつ `NEXT_PUBLIC_DEBUG_MODE=true` の両方を満たす時のみ動作**し、
-本番ビルドでは `notFound()` を返します。DB は一切書き換えません。
-
-### 削除手順(本番リリース前に実施)
-
-1. フォルダ削除: `src/app/(debug)/`
-2. デバッグストア削除: `src/lib/stores/debugStore.ts`
-3. デバッグガード削除: `src/lib/debug/enabled.ts`
-4. `src/app/(app)/dashboard/DashboardClient.tsx` から以下を取り除く:
-   - `useDebugStore` / `useEffectiveDay` / `DEBUG_ENABLED` の import 行
-   - `consumeForced` を使った useEffect 全体
-   - 末尾の `{DEBUG_ENABLED && (...)} ` ブロック
-   - `day = useEffectiveDay(props.serverDay)` → `day = props.serverDay`
-5. `src/components/city/CityScene.tsx` の `useEffectiveSeason` 呼び出しを外し、
-   `effective = season` に置き換え
-6. `.env.local` から `NEXT_PUBLIC_DEBUG_MODE` 行を削除
-7. `pnpm build` を実行してエラーが出ないか確認

@@ -1,0 +1,23 @@
+# Cloudflare Workers ローカル開発(pnpm preview = wrangler dev)用の環境変数。
+# 中身は .env.local とほぼ同じだが、wrangler は .env.local を読まないので
+# このファイルにも同等の値を入れておく必要がある。
+#
+# 実体は .dev.vars(.gitignore 済み)。このファイルはサンプル。
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# 認証用ダミードメイン
+DUMMY_EMAIL_DOMAIN=dummy.cityup.local
+
+# サインアップ開放フラグ
+# 本番デフォルトは閉じる。ローカル開発で動作確認したいときだけ true。
+NEXT_PUBLIC_SIGNUP_ENABLED=true
+
+# シェアカードのアプリ URL(本番ドメインを設定するか、未設定なら cityup.example.com)
+# NEXT_PUBLIC_APP_URL=
+
+# デバッグツールの開放(NODE_ENV=development との AND で初めて true 扱い)
+NEXT_PUBLIC_DEBUG_MODE=true

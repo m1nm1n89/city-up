@@ -41,10 +41,10 @@ export function ShareCardSquare(props: ShareCardData) {
             color: "#222",
           }}
         >
-          Month {month}
+          {month} ヶ月目
         </div>
         <div style={{ display: "flex", fontSize: 36, color: "#555", marginTop: 4 }}>
-          Day {props.day}
+          {props.day} 日目
         </div>
       </div>
 
@@ -80,14 +80,14 @@ export function ShareCardSquare(props: ShareCardData) {
         }}
       >
         <div style={{ display: "flex", fontSize: 28, color: "#444" }}>
-          Total: {props.totalActiveDays} checks
+          累計 {props.totalActiveDays} 日
         </div>
         <div style={{ display: "flex", fontSize: 24, color: "#666", marginTop: 6 }}>
           <div style={{ display: "flex", marginRight: 24 }}>
-            {props.buildingCount} buildings
+            建物 {props.buildingCount} 棟
           </div>
           <div style={{ display: "flex" }}>
-            {props.villagerCount} villagers
+            住人 {props.villagerCount} 人
           </div>
         </div>
       </div>
