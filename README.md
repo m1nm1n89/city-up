@@ -80,10 +80,23 @@ NEXT_PUBLIC_DEBUG_MODE=true
 | 2 | `0002_coin_logic.sql` | コイン RPC・SECURITY DEFINER で改ざん耐性 |
 | 3 | `0003_season_and_era.sql` | 季節列追加 + `set_season` / `set_current_era` RPC |
 | 4 | `0004_fix_apply_coin_target.sql` | 0→1→0→1 バグの修正 |
+| 5 | `0005_lock_milestone_progress.sql` | milestone_progress の直接 UPDATE 封じ(`set_current_era` 経由のみ) |
 
-実行後、`Database → Tables` で **全 8 テーブル**(`profiles` / `user_settings` /
-`daily_checks` / `weekly_goals` / `monthly_stats` / `coin_balance` /
-`milestone_progress` / `coin_transactions`)が `RLS enabled` になっていることを確認してください。
+実行後、SQL Editor で以下を実行し、**全 8 テーブル(profiles / user_settings /
+daily_checks / weekly_goals / monthly_stats / coin_balance / milestone_progress /
+coin_transactions)** が `rls_enabled = true` かつ `policy_count = 1` であることを確認してください。
+
+```sql
+SELECT tablename, rowsecurity AS rls_enabled,
+  (SELECT count(*) FROM pg_policies p
+    WHERE p.schemaname = t.schemaname AND p.tablename = t.tablename) AS policy_count
+FROM pg_tables t
+WHERE schemaname = 'public'
+ORDER BY tablename;
+```
+
+> `policy_count` が 3 のテーブルがあれば赤信号(0002/0003/0005 のどれかを適用し忘れている可能性)。
+> 書き込み系は全て RPC(SECURITY DEFINER)経由にしてあるため、SELECT 用の 1 つだけが残っている状態が正解。
 
 ### 7. 開発サーバ起動
 
@@ -122,6 +135,13 @@ pnpm preview
 `opennextjs-cloudflare build && opennextjs-cloudflare preview` の合成です。
 ビルド後 wrangler のローカルサーバ(通常 http://localhost:8787)が起動します。
 
+> **R2 incremental cache について**
+> 現状 [`open-next.config.ts`](./open-next.config.ts) では incremental cache を未設定にしています
+> (このアプリは ISR を使わず、`revalidatePath` 中心のため)。
+> マルチノードで cache invalidation を強化したくなった場合は `wrangler r2 bucket create city-up-cache`
+> でバケットを作成し、`wrangler.jsonc` に binding(`NEXT_INC_CACHE_R2_BUCKET`)を追加した上で
+> `open-next.config.ts` を R2 cache 戻し版に書き換えてください(ファイル冒頭コメント参照)。
+
 ### 3. 検証チェック項目
 
 - サインアップ → リカバリーコード表示 → ログイン → ログアウト
@@ -154,9 +174,9 @@ pnpm preview
 
 開発用とは **別の Supabase プロジェクト** を新規作成します(`city-up-prod` 推奨、リージョン Tokyo)。
 
-- 開発用と同じ 4 つのマイグレーション(0001 → 0004)を順番に適用
+- 開発用と同じ **5 つのマイグレーション**(`0001` → `0002` → `0003` → `0004` → `0005`)を**この順番**で適用
 - メール確認を OFF
-- 全テーブルで RLS が有効か確認(Database → Tables の `RLS` 列が全て緑)
+- 上記の点検クエリ(全テーブル `rls_enabled=true` / `policy_count=1`)が通ることを確認
 - 3 つのキー(URL / anon / service_role)を取得
 
 ### 2. wrangler secret の登録
