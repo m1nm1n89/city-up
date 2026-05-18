@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useShareModalStore } from "@/lib/stores/shareModalStore";
 import {
   APP_URL,
@@ -56,30 +56,52 @@ export function ShareCardModal() {
   const [landscape, setLandscape] = useState<ImageState>({ status: "loading" });
   const [square, setSquare] = useState<ImageState>({ status: "loading" });
 
-  // モーダルが開く度に画像を取り直し、閉じる時に blob URL を破棄
+  // 生成した blob URL を ref で追跡。state 変更ごとに revoke しないことで、
+  // 「16:9 が完成 → 1:1 が完成」の二段階で前者を誤って解放するのを防ぐ。
+  const urlsRef = useRef<string[]>([]);
+  const trackUrl = (r: ImageState) => {
+    if (r.status === "ready") urlsRef.current.push(r.url);
+  };
+  const revokeAll = () => {
+    for (const u of urlsRef.current) URL.revokeObjectURL(u);
+    urlsRef.current = [];
+  };
+
+  // モーダルが開く / period が変わるたびに画像を取り直す
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    revokeAll();
     setLandscape({ status: "loading" });
     setSquare({ status: "loading" });
+
     void loadImage("landscape", period).then((r) => {
-      if (!cancelled) setLandscape(r);
+      if (cancelled) {
+        if (r.status === "ready") URL.revokeObjectURL(r.url);
+        return;
+      }
+      trackUrl(r);
+      setLandscape(r);
     });
     void loadImage("square", period).then((r) => {
-      if (!cancelled) setSquare(r);
+      if (cancelled) {
+        if (r.status === "ready") URL.revokeObjectURL(r.url);
+        return;
+      }
+      trackUrl(r);
+      setSquare(r);
     });
     return () => {
       cancelled = true;
     };
   }, [open, period]);
 
-  // モーダルクローズ時に古い blob を解放
+  // アンマウント時に残った blob URL を全部解放
   useEffect(() => {
     return () => {
-      if (landscape.status === "ready") URL.revokeObjectURL(landscape.url);
-      if (square.status === "ready") URL.revokeObjectURL(square.url);
+      revokeAll();
     };
-  }, [landscape, square]);
+  }, []);
 
   // ESC でクローズ
   useEffect(() => {
