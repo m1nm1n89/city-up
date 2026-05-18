@@ -144,12 +144,12 @@ export function ShareCardModal() {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/60 p-4 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="w-full max-w-2xl rounded-xl bg-white dark:bg-gray-900 shadow-2xl p-5 space-y-4">
+      <div className="w-full max-w-2xl my-auto rounded-xl bg-white dark:bg-gray-900 shadow-2xl p-5 space-y-4">
         <header className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold">シェアカード</h2>
@@ -193,7 +193,7 @@ export function ShareCardModal() {
             <img
               src={current.url}
               alt={`シェアカード ${selected}`}
-              className="w-full h-auto block"
+              className="max-w-full max-h-[55vh] w-auto h-auto object-contain block"
             />
           )}
         </div>
