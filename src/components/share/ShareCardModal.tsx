@@ -162,6 +162,16 @@ export function ShareCardModal() {
     window.open(intent, "_blank", "noopener,noreferrer");
   }
 
+  function shareOnLine() {
+    if (current.status !== "ready") return;
+    const text = buildShareText(day);
+    const url = APP_URL;
+    // LINE は web share endpoint がテキスト + URL のみ受ける(画像添付は不可)。
+    // 画像を載せたい場合はユーザーが事前にダウンロードしてからトーク内で添付する想定。
+    const intent = `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    window.open(intent, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <div
       role="dialog"
@@ -227,6 +237,14 @@ export function ShareCardModal() {
             className="rounded-md border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm"
           >
             閉じる
+          </button>
+          <button
+            type="button"
+            onClick={shareOnLine}
+            disabled={current.status !== "ready"}
+            className="rounded-md border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            LINE で共有
           </button>
           <button
             type="button"
